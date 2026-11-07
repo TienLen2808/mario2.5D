@@ -1,0 +1,422 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+// Sinh map vô tận từ 1 mảnh Segment duy nhất:
+// - Random độ cao từng mảnh (luôn trong tầm nhảy của Player)
+// - Random quái (Ogre nhỏ + Ogre to) và xu
+// - Dùng Object Pooling cho mảnh map, quái, xu (không Instantiate/Destroy liên tục)
+public class LevelGenerator : MonoBehaviour
+{
+    [Header("Prefab")]
+    [Tooltip("Mảnh map gốc (Segment_1). Chỉ cần có object Ground, Coin bên trong sẽ được dùng làm mẫu xu")]
+    public GameObject segmentPrefab;
+    [Tooltip("Để trống = tự lấy object 'Coin' bên trong segmentPrefab")]
+    public GameObject coinPrefab;
+
+    [Header("Tên object con trong Segment")]
+    public string groundName = "Ground";
+    public string coinName = "Coin";
+
+    [Header("Cấu hình sinh map")]
+    public Transform playerTransform;
+    public int initialSegments = 5;          // Số mảnh sinh sẵn lúc bắt đầu
+    public float safeDistance = 25f;         // Player còn cách cuối map bao nhiêu thì sinh thêm
+    public float removeBehindDistance = 15f; // Mảnh nằm sau lưng Player quá khoảng này thì thu hồi
+    public int safeStartSegments = 1;        // Số mảnh đầu bằng phẳng, không có quái
+    public float fallbackSegmentLength = 20f;
+
+    [Header("Độ cao")]
+    [Tooltip("Tỉ lệ an toàn so với độ cao nhảy tối đa (0.5 = chỉ dùng một nửa)")]
+    [Range(0.2f, 0.9f)] public float jumpSafety = 0.5f;
+    public float maxStepDown = 3f;           // Mảnh sau thấp hơn mảnh trước tối đa bao nhiêu
+    public float minHeight = -2f;
+    public float maxHeight = 6f;
+    public float heightSnap = 0.5f;          // Làm tròn độ cao cho gọn (0 = không làm tròn)
+
+    [Header("Quái nhỏ (Ogre mini)")]
+    public int maxEnemiesStart = 1;          // Số quái tối đa ở đầu game
+    public int maxEnemiesCap = 3;            // Số quái tối đa khi game đã khó
+    public int segmentsPerDifficulty = 4;    // Cứ bao nhiêu mảnh thì tăng 1 quái tối đa
+    public float enemyEdgeMargin = 2.5f;     // Cách mép mảnh
+    public float enemyMinSpacing = 4f;       // Khoảng cách tối thiểu giữa 2 quái
+
+    [Header("Quái khổng lồ (Ogre)")]
+    [Range(0f, 1f)] public float ogreChance = 0.35f;  // Xác suất 1 mảnh có Ogre to
+    public int ogreStartSegment = 2;                   // Từ mảnh thứ mấy mới bắt đầu có Ogre to
+    public float ogreEdgeMargin = 2.5f;                // Ogre đi tuần cách mép mảnh
+    public float ogreClearance = 5f;                   // Quái nhỏ đứng cách Ogre to tối thiểu
+
+    [Header("Rồng lửa (quái bay)")]
+    [Range(0f, 1f)] public float dragonChance = 0.55f; // Xác suất 1 mảnh có Rồng
+    public int dragonStartSegment = 1;                  // Có Rồng ngay từ mảnh đầu tiên sau mảnh an toàn
+    public int maxDragonsPerSegment = 2;                // Game khó dần thì 1 mảnh có thể có 2 Rồng
+    public int segmentsPerExtraDragon = 8;              // Cứ bao nhiêu mảnh thì thêm 1 Rồng tối đa
+    public float dragonHoverMin = 3f;                   // Độ cao bay so với mặt đất
+    public float dragonHoverMax = 4.5f;
+
+    [Header("Xu")]
+    public int minCoins = 0;
+    public int maxCoins = 6;
+    public float coinEdgeMargin = 1f;
+    public float coinMinHeight = 1f;         // Độ cao so với mặt ground
+    public float coinMaxHeight = 3f;
+    public float coinSpacing = 1.2f;         // Khoảng cách giữa các xu trong 1 hàng
+    public float coinAvoidEnemyDistance = 1.2f;
+
+    // ---------------------------------------------------------------------
+
+    private class Segment
+    {
+        public GameObject root;
+        public Transform ground;
+        public float minX, maxX, topY;
+        public List<GameObject> items = new List<GameObject>();
+    }
+
+    private readonly List<Segment> activeSegments = new List<Segment>();
+    private readonly Queue<Segment> segmentPool = new Queue<Segment>();
+    private readonly Queue<GameObject> coinPool = new Queue<GameObject>();
+    private readonly Queue<OgreController> ogrePool = new Queue<OgreController>();
+    private readonly Queue<OgreController> miniPool = new Queue<OgreController>();
+    private readonly Queue<DragonController> dragonPool = new Queue<DragonController>();
+
+    private float spawnX;            // Mép trái của mảnh tiếp theo
+    private float currentHeight = 0f;
+    private float maxStepUp = 2.5f;
+    private int segmentsSpawned = 0;
+    private Transform poolRoot;
+
+    void Start()
+    {
+        if (playerTransform == null)
+        {
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null) playerTransform = player.transform;
+        }
+
+        if (segmentPrefab == null)
+        {
+            Debug.LogError("LevelGenerator: chưa gán segmentPrefab!");
+            enabled = false;
+            return;
+        }
+
+        // Nếu gán object có sẵn trong Scene thì ẩn đi, chỉ dùng làm khuôn
+        if (segmentPrefab.scene.IsValid()) segmentPrefab.SetActive(false);
+
+        // Tự lấy xu mẫu từ bên trong segment nếu chưa gán
+        if (coinPrefab == null) coinPrefab = FindChildObject(segmentPrefab.transform, coinName);
+
+        poolRoot = new GameObject("LevelPool").transform;
+
+        // Tính độ cao nhảy tối đa: h = v^2 / (2g)
+        float jumpForce = 10f;
+        if (playerTransform != null)
+        {
+            PlayerController pc = playerTransform.GetComponent<PlayerController>();
+            if (pc != null) jumpForce = pc.jumpForce;
+        }
+        float g = Mathf.Abs(Physics.gravity.y);
+        float maxJumpHeight = g > 0.01f ? (jumpForce * jumpForce) / (2f * g) : 3f;
+        maxStepUp = maxJumpHeight * jumpSafety;
+
+        spawnX = (playerTransform != null) ? playerTransform.position.x - 5f : 0f;
+
+        for (int i = 0; i < initialSegments; i++) SpawnSegment();
+    }
+
+    void Update()
+    {
+        if (playerTransform == null) return;
+
+        // Sinh thêm mảnh trước mặt
+        while (playerTransform.position.x + safeDistance > spawnX)
+        {
+            SpawnSegment();
+        }
+
+        // Thu hồi mảnh đã ở xa sau lưng
+        while (activeSegments.Count > 0 &&
+               activeSegments[0].maxX < playerTransform.position.x - removeBehindDistance)
+        {
+            RecycleSegment(activeSegments[0]);
+            activeSegments.RemoveAt(0);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Sinh mảnh map
+
+    void SpawnSegment()
+    {
+        bool isSafe = segmentsSpawned < safeStartSegments;
+
+        // 1. Random độ cao (mảnh an toàn giữ nguyên độ cao)
+        if (!isSafe)
+        {
+            float next = currentHeight + Random.Range(-maxStepDown, maxStepUp);
+            if (heightSnap > 0f) next = Mathf.Round(next / heightSnap) * heightSnap;
+            // Sau khi làm tròn vẫn phải đảm bảo nhảy lên được
+            if (next - currentHeight > maxStepUp) next -= heightSnap;
+            currentHeight = Mathf.Clamp(next, minHeight, maxHeight);
+        }
+
+        // 2. Lấy mảnh từ pool và đặt mép trái đúng spawnX
+        Segment seg = GetSegment();
+        seg.root.transform.position = new Vector3(0f, currentHeight, 0f);
+        seg.root.SetActive(true);
+        MeasureSegment(seg);
+
+        float offset = spawnX - seg.minX;
+        seg.root.transform.position += new Vector3(offset, 0f, 0f);
+        seg.minX += offset;
+        seg.maxX += offset;
+
+        // 3. Random quái và xu
+        List<float> enemyXs = new List<float>();
+        if (!isSafe)
+        {
+            if (segmentsSpawned >= ogreStartSegment && Random.value < ogreChance) SpawnOgre(seg, enemyXs);
+            SpawnMiniOgres(seg, enemyXs);
+            if (segmentsSpawned >= dragonStartSegment) SpawnDragons(seg);
+        }
+        SpawnCoins(seg, enemyXs);
+
+        activeSegments.Add(seg);
+        spawnX = seg.maxX;
+        segmentsSpawned++;
+    }
+
+    void SpawnOgre(Segment seg, List<float> enemyXs)
+    {
+        float left = seg.minX + ogreEdgeMargin;
+        float right = seg.maxX - ogreEdgeMargin;
+        if (right <= left) return;
+
+        float x = (left + right) * 0.5f;
+        OgreController ogre = GetOgre(ogrePool, false);
+        PlaceOgre(ogre, seg, x, left, right);
+
+        // Đánh dấu vùng của Ogre to để quái nhỏ không đứng sát
+        for (float k = -ogreClearance; k <= ogreClearance; k += 1f)
+            enemyXs.Add(x + k);
+    }
+
+    void SpawnMiniOgres(Segment seg, List<float> enemyXs)
+    {
+        int difficulty = segmentsPerDifficulty > 0 ? (segmentsSpawned - safeStartSegments) / segmentsPerDifficulty : 0;
+        int maxEnemies = Mathf.Min(maxEnemiesCap, maxEnemiesStart + Mathf.Max(0, difficulty));
+        int count = Random.Range(0, maxEnemies + 1);
+
+        float left = seg.minX + enemyEdgeMargin;
+        float right = seg.maxX - enemyEdgeMargin;
+        if (right <= left) return;
+
+        for (int i = 0; i < count; i++)
+        {
+            // Thử vài lần để tìm chỗ không quá sát quái khác
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                float x = Random.Range(left, right);
+                if (!IsFarFromAll(x, enemyXs, enemyMinSpacing)) continue;
+
+                enemyXs.Add(x);
+                OgreController mini = GetOgre(miniPool, true);
+                PlaceOgre(mini, seg, x, seg.minX + 1f, seg.maxX - 1f);
+                break;
+            }
+        }
+    }
+
+    void SpawnDragons(Segment seg)
+    {
+        int extra = segmentsPerExtraDragon > 0 ? segmentsSpawned / segmentsPerExtraDragon : 0;
+        int maxCount = Mathf.Clamp(1 + extra, 1, maxDragonsPerSegment);
+
+        for (int i = 0; i < maxCount; i++)
+        {
+            if (Random.value >= dragonChance) continue;
+
+            DragonController d = null;
+            while (dragonPool.Count > 0 && d == null) d = dragonPool.Dequeue();
+            if (d == null) d = DragonController.Create();
+            d.gameObject.SetActive(false);
+            d.transform.SetParent(null);
+
+            float x = Random.Range(seg.minX + 3f, seg.maxX - 3f);
+            float h = Random.Range(dragonHoverMin, dragonHoverMax);
+            d.minX = seg.minX + 1f;
+            d.maxX = seg.maxX - 1f;
+            d.groundY = seg.topY;
+            d.hoverHeight = h;
+            d.transform.SetPositionAndRotation(new Vector3(x, seg.topY + h, 0f), Quaternion.identity);
+            d.gameObject.SetActive(true);
+            seg.items.Add(d.gameObject);
+        }
+    }
+
+    OgreController GetOgre(Queue<OgreController> pool, bool mini)
+    {
+        OgreController o = null;
+        while (pool.Count > 0 && o == null) o = pool.Dequeue(); // bỏ qua object đã bị Destroy
+        if (o == null) o = OgreController.Create(mini);
+        o.gameObject.SetActive(false);
+        o.transform.SetParent(null);
+        return o;
+    }
+
+    void PlaceOgre(OgreController o, Segment seg, float x, float minX, float maxX)
+    {
+        o.minX = minX;
+        o.maxX = maxX;
+        o.transform.SetPositionAndRotation(new Vector3(x, seg.topY + 0.02f, 0f), Quaternion.identity);
+        o.gameObject.SetActive(true); // OnEnable sẽ reset máu, trạng thái
+        seg.items.Add(o.gameObject);
+    }
+
+    void SpawnCoins(Segment seg, List<float> enemyXs)
+    {
+        if (coinPrefab == null) return;
+
+        int count = Random.Range(minCoins, maxCoins + 1);
+        if (count <= 0) return;
+
+        float left = seg.minX + coinEdgeMargin;
+        float right = seg.maxX - coinEdgeMargin;
+        float rowLength = (count - 1) * coinSpacing;
+        if (right - left < rowLength) return;
+
+        // Xu xếp thành 1 hàng ngang, độ cao random (hoặc hình vòng cung nếu random trúng)
+        float startX = Random.Range(left, right - rowLength);
+        float baseHeight = Random.Range(coinMinHeight, coinMaxHeight);
+        bool arc = count >= 3 && Random.value < 0.4f;
+
+        for (int i = 0; i < count; i++)
+        {
+            float x = startX + i * coinSpacing;
+            float h = baseHeight;
+            if (arc)
+            {
+                float t = (count == 1) ? 0f : (float)i / (count - 1);   // 0..1
+                h = coinMinHeight + Mathf.Sin(t * Mathf.PI) * (coinMaxHeight - coinMinHeight);
+            }
+
+            // Xu thấp mà trùng chỗ quái thì nâng lên cho dễ ăn
+            if (!IsFarFromAll(x, enemyXs, coinAvoidEnemyDistance))
+                h = Mathf.Max(h, coinMaxHeight);
+
+            GameObject coin = GetCoin();
+            coin.transform.position = new Vector3(x, seg.topY + h, coinPrefab.transform.localPosition.z);
+            coin.SetActive(true);
+            seg.items.Add(coin);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Pool
+
+    Segment GetSegment()
+    {
+        if (segmentPool.Count > 0) return segmentPool.Dequeue();
+
+        Segment seg = new Segment();
+        seg.root = Instantiate(segmentPrefab, poolRoot);
+        seg.root.name = segmentPrefab.name;
+        seg.root.transform.SetParent(null);
+
+        // Bỏ xu có sẵn trong prefab (xu sẽ được sinh random), giữ lại Ground và trang trí khác
+        List<GameObject> toRemove = new List<GameObject>();
+        foreach (Transform t in seg.root.GetComponentsInChildren<Transform>(true))
+        {
+            if (t == seg.root.transform) continue;
+            if (t.name == coinName) toRemove.Add(t.gameObject);
+        }
+        foreach (GameObject go in toRemove) { go.transform.SetParent(null); Destroy(go); }
+
+        Transform g = FindChildRecursive(seg.root.transform, groundName);
+        seg.ground = g != null ? g : seg.root.transform;
+        return seg;
+    }
+
+    void RecycleSegment(Segment seg)
+    {
+        foreach (GameObject item in seg.items)
+        {
+            if (item == null) continue; // phòng trường hợp script khác lỡ Destroy
+            item.SetActive(false);
+            item.transform.SetParent(poolRoot);
+
+            DragonController dc = item.GetComponent<DragonController>();
+            OgreController o = item.GetComponent<OgreController>();
+            if (dc != null) dragonPool.Enqueue(dc);
+            else if (o != null)
+            {
+                if (o.isMini) miniPool.Enqueue(o);
+                else ogrePool.Enqueue(o);
+            }
+            else coinPool.Enqueue(item);
+        }
+        seg.items.Clear();
+        seg.root.SetActive(false);
+        segmentPool.Enqueue(seg);
+    }
+
+    GameObject GetCoin()
+    {
+        GameObject go = null;
+        while (coinPool.Count > 0 && go == null) go = coinPool.Dequeue();
+        if (go == null)
+        {
+            go = Instantiate(coinPrefab, poolRoot);
+            go.SetActive(false);
+            go.name = coinName;
+        }
+        go.transform.SetParent(null);
+        return go;
+    }
+
+    // ---------------------------------------------------------------------
+    // Tiện ích
+
+    void MeasureSegment(Segment seg)
+    {
+        Renderer[] rs = seg.ground.GetComponentsInChildren<Renderer>();
+        if (rs.Length == 0)
+        {
+            seg.minX = seg.root.transform.position.x - fallbackSegmentLength * 0.5f;
+            seg.maxX = seg.minX + fallbackSegmentLength;
+            seg.topY = seg.root.transform.position.y;
+            return;
+        }
+
+        Bounds b = rs[0].bounds;
+        for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+        seg.minX = b.min.x;
+        seg.maxX = b.max.x;
+        seg.topY = b.max.y;
+    }
+
+    bool IsFarFromAll(float x, List<float> xs, float minDistance)
+    {
+        foreach (float other in xs)
+            if (Mathf.Abs(other - x) < minDistance) return false;
+        return true;
+    }
+
+    GameObject FindChildObject(Transform parent, string childName)
+    {
+        Transform t = FindChildRecursive(parent, childName);
+        return t != null ? t.gameObject : null;
+    }
+
+    Transform FindChildRecursive(Transform parent, string childName)
+    {
+        foreach (Transform child in parent)
+        {
+            if (child.name == childName) return child;
+            Transform found = FindChildRecursive(child, childName);
+            if (found != null) return found;
+        }
+        return null;
+    }
+}

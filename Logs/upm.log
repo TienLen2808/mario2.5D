@@ -1,0 +1,80 @@
+[2026-10-22T04:40:11.156Z][INFO] Command-line: /Applications/Unity/Hub/Editor/6000.6.4f1/Unity.app/Contents/Helpers/PackageManager/Server/UnityPackageManager server -s 13113 --ipc-path /tmp/Unity-Upm-13113.sock -l 2 --log-file /Users/macbook/Documents/Mario2.5D/Logs/upm.log
+[2026-10-22T04:40:11.170Z][INFO] IPC server started (IPC path=/tmp/Unity-Upm-13113.sock).
+[2026-10-22T04:40:11.170Z][INFO] Hint: To connect to this UPM instance, launch Unity with the command-line parameter -upmIpcPath Upm-13113.
+[2026-10-22T04:40:14.290Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T04:40:14.329Z][INFO] config:project:get-registries <-- Request received
+params: {}
+[2026-10-22T04:40:14.338Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T04:40:14.349Z][INFO] config:project:get-registries --> 200 (20 ms)
+[2026-10-22T04:40:14.502Z][INFO] project:list-packages --> 200 (212 ms)
+[2026-10-22T04:40:14.503Z][INFO] project:list-packages --> 200 (165 ms)
+[2026-10-22T04:40:18.234Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T04:40:18.273Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T04:40:18.304Z][INFO] project:list-packages --> 200 (70 ms)
+[2026-10-22T04:40:18.352Z][INFO] project:list-packages --> 200 (79 ms)
+[2026-10-22T04:40:18.435Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T04:40:18.492Z][INFO] config:project:get-registries <-- Request received
+params: {}
+[2026-10-22T04:40:18.499Z][INFO] config:project:get-registries --> 200 (7 ms)
+[2026-10-22T04:40:18.511Z][INFO] project:list-packages --> 200 (76 ms)
+[2026-10-22T04:40:24.326Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T04:40:24.390Z][INFO] project:list-packages --> 200 (65 ms)
+[2026-10-22T04:40:28.149Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T04:40:30.234Z][ERROR] Error: Request [GET https://packages.unity.com/com.unity.searcher] failed with status code [503]
+[2026-10-22T04:40:31.607Z][INFO] project:list-packages --> 200 (3458 ms)
+[2026-10-22T05:36:05.512Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T05:36:06.276Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T05:36:08.941Z][INFO] project:list-packages --> 200 (2665 ms)
+[2026-10-22T05:36:08.942Z][INFO] project:list-packages --> 200 (3435 ms)
+[2026-10-22T05:36:10.369Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T05:36:10.453Z][INFO] project:list-packages --> 200 (84 ms)
+[2026-10-22T05:36:10.969Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T05:36:11.045Z][INFO] project:list-packages --> 200 (76 ms)
+[2026-10-22T05:36:11.572Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T05:36:11.647Z][INFO] project:list-packages --> 200 (76 ms)
+[2026-10-22T05:36:12.570Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T05:36:12.635Z][INFO] project:list-packages --> 200 (65 ms)
+[2026-10-22T07:35:36.474Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T07:35:36.942Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T07:35:39.361Z][INFO] project:list-packages --> 200 (2419 ms)
+[2026-10-22T07:35:39.361Z][INFO] project:list-packages --> 200 (2891 ms)
+[2026-10-22T07:35:41.644Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T07:35:41.692Z][INFO] project:list-packages --> 200 (47 ms)
+[2026-10-22T07:35:42.540Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T07:35:42.592Z][INFO] project:list-packages --> 200 (52 ms)
+[2026-10-22T09:35:39.372Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T09:35:40.035Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T09:35:41.652Z][INFO] project:list-packages --> 200 (1617 ms)
+[2026-10-22T09:35:41.653Z][INFO] project:list-packages --> 200 (2285 ms)
+[2026-10-22T09:35:44.426Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T09:35:44.493Z][INFO] project:list-packages --> 200 (67 ms)
+[2026-10-22T09:35:44.835Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T09:35:44.912Z][INFO] project:list-packages --> 200 (77 ms)
+[2026-10-22T09:35:46.527Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T09:35:46.585Z][INFO] project:list-packages --> 200 (58 ms)
+[2026-10-22T09:35:47.137Z][INFO] project:list-packages <-- Request received
+params: {}
+[2026-10-22T09:35:47.214Z][INFO] project:list-packages --> 200 (78 ms)
+[2026-10-22T09:53:09.534Z][INFO] Received shutdown request (SIGTERM), shutting down Unity Package Manager

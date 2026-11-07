@@ -1,0 +1,69 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+public class LevelGenerator : MonoBehaviour
+{
+    [Header("Danh sách Mảnh Map (Prefabs)")]
+    public GameObject[] levelSegmentPrefabs; // Các mẫu map đã tạo
+
+    [Header("Cấu hình Sinh Map")]
+    public Transform playerTransform;
+    public float segmentLength = 20f;        // Chiều dài mỗi mảnh map (đo bằng trục X)
+    public int initialSegments = 5;          // Số lượng mảnh map xuất hiện ban đầu
+    public float safeDistance = 25f;         // Khoảng cách sinh map mới trước mặt Player
+
+    private float spawnX = 0f;               // Tọa độ X tiếp theo để đặt map
+    private List<GameObject> activeSegments = new List<GameObject>();
+
+    void Start()
+    {
+        if (playerTransform == null)
+        {
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null) playerTransform = player.transform;
+        }
+
+        // Bắt đầu vị trí spawnX đúng từ tọa độ hiện tại của Player
+        if (playerTransform != null)
+        {
+            spawnX = playerTransform.position.x - 5f; // Tạo lùi lại 5 đơn vị phía sau lưng để Player không bị rơi
+        }
+
+        // Sinh các mảnh map ban đầu
+        for (int i = 0; i < initialSegments; i++)
+        {
+            // Mảnh đầu tiên (i == 0) dùng Segment_1 làm mảnh an toàn
+            SpawnSegment(i == 0 ? 0 : Random.Range(0, levelSegmentPrefabs.Length));
+        }
+    }
+
+    void Update()
+    {
+        if (playerTransform == null) return;
+
+        // Nếu Player tiến gần đến cuối đoạn map hiện tại -> Sinh mảnh map mới
+        if (playerTransform.position.x + safeDistance > spawnX)
+        {
+            int randomIndex = Random.Range(0, levelSegmentPrefabs.Length);
+            SpawnSegment(randomIndex);
+            RemoveOldSegment();
+        }
+    }
+
+    void SpawnSegment(int segmentIndex)
+    {
+        // Tạo mảnh map mới tại vị trí spawnX
+        GameObject segment = Instantiate(levelSegmentPrefabs[segmentIndex], new Vector3(spawnX, 0, 0), Quaternion.identity);
+        activeSegments.Add(segment);
+
+        // Đẩy tọa độ spawnX sang phải cho mảnh tiếp theo
+        spawnX += segmentLength;
+    }
+
+    void RemoveOldSegment()
+    {
+        // Xóa mảnh map đã trôi qua đằng sau lưng Player để tiết kiệm bộ nhớ
+        Destroy(activeSegments[0]);
+        activeSegments.RemoveAt(0);
+    }
+}

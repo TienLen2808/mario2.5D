@@ -1,0 +1,105 @@
+using UnityEngine;
+
+public class EnemyController : MonoBehaviour
+{
+    [Header("Di chuyển mặc định")]
+    public float patrolSpeed = 2f;      // Tốc độ khi đi tuần
+    public float patrolDistance = 3f;   // Khoảng cách đi tuần qua lại
+
+    [Header("Cơ chế phát hiện & Đuổi theo")]
+    public float chaseSpeed = 4.5f;     // Tốc độ khi lao vào Player (nhanh hơn)
+    public float detectionRange = 5f;   // Khoảng cách phát hiện Player
+
+    private Vector3 startPosition;
+    private bool movingRight = true;
+    private Transform playerTransform;
+
+    private Rigidbody rb;
+
+    // Chạy mỗi lần bot được bật lại từ pool -> reset trạng thái theo vị trí mới
+    void OnEnable()
+    {
+        startPosition = transform.position;
+        movingRight = Random.value > 0.5f;
+
+        if (rb == null) rb = GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+    }
+
+    void Start()
+    {
+
+        // Tìm đối tượng có Tag "Player" trong màn chơi
+        GameObject player = GameObject.FindGameObjectWithTag("Player");
+        if (player != null)
+        {
+            playerTransform = player.transform;
+        }
+    }
+
+    void Update()
+    {
+        if (playerTransform == null) return;
+
+        // Tính khoảng cách từ Quái đến Player
+        float distanceToPlayer = Vector3.Distance(transform.position, playerTransform.position);
+
+        // Nếu Player đi vào vùng phát hiện -> Lao vào Player
+        if (distanceToPlayer <= detectionRange)
+        {
+            ChasePlayer();
+        }
+        else
+        {
+            // Ngược lại -> Đi tuần bình thường
+            Patrol();
+        }
+    }
+
+    void Patrol()
+    {
+        if (movingRight)
+        {
+            transform.Translate(Vector3.right * patrolSpeed * Time.deltaTime);
+            if (transform.position.x >= startPosition.x + patrolDistance)
+            {
+                movingRight = false;
+            }
+        }
+        else
+        {
+            transform.Translate(Vector3.left * patrolSpeed * Time.deltaTime);
+            if (transform.position.x <= startPosition.x - patrolDistance)
+            {
+                movingRight = true;
+            }
+        }
+    }
+
+    void ChasePlayer()
+    {
+        // Xác định hướng của Player (chỉ tính trục X cho game 2.5D)
+        float direction = playerTransform.position.x - transform.position.x;
+
+        // Di chuyển về phía Player
+        if (direction > 0)
+        {
+            transform.Translate(Vector3.right * chaseSpeed * Time.deltaTime);
+        }
+        else
+        {
+            transform.Translate(Vector3.left * chaseSpeed * Time.deltaTime);
+        }
+    }
+
+    // Vẽ vòng tròn tầm phát hiện trong cửa sổ Scene để dễ căn chỉnh
+    private void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, detectionRange);
+    }
+}
